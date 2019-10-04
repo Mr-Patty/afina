@@ -99,6 +99,8 @@ bool SimpleLRU::setValue(const std::string &key, const std::string &value) {
     while (node.get().key.size() + value.size() - node.get().value.size() + _current_size > _max_size)
         deleteOldest();
 
+    if (_lru_tail == nullptr)
+        return createNode(key, value);
     node.get().value = value;
 
     updateList(node);
@@ -112,9 +114,13 @@ void SimpleLRU::deleteOldest() {
 
     if (_lru_head->next != nullptr) {
         _lru_head->next->prev = _lru_head->prev;
+
+        std::unique_ptr<lru_node> tmp(std::move(_lru_head));
+        _lru_head = std::move(tmp->next);
+    } else {
+        _lru_tail = nullptr;
+        _lru_head.reset();
     }
-    std::unique_ptr<lru_node> tmp(std::move(_lru_head));
-    _lru_head = std::move(tmp->next);
 }
 
 bool SimpleLRU::createNode(const std::string &key, const std::string &value) {
