@@ -50,13 +50,22 @@ public:
 private:
     // LRU cache node
     using lru_node = struct lru_node {
-        std::string key;
+        const std::string key;
         std::string value;
         lru_node* prev;
-//        lru_node* next;
-//        std::unique_ptr<lru_node> prev;
         std::unique_ptr<lru_node> next;
     };
+
+    void updateList(std::reference_wrapper<lru_node>);
+
+    bool setValue(
+            std::map<std::reference_wrapper<const std::string>,
+                    std::reference_wrapper<lru_node>, std::less<std::string>>::iterator it,
+            const std::string &value);
+
+    void deleteOldest(size_t extra_size);
+
+    bool createNode(const std::string &key, const std::string &value);
 
     // Maximum number of bytes could be stored in this cache.
     // i.e all (keys+values) must be less the _max_size
@@ -72,14 +81,6 @@ private:
 
     // Index of nodes from list above, allows fast random access to elements by lru_node#key
     std::map<std::reference_wrapper<const std::string>, std::reference_wrapper<lru_node>, std::less<std::string>> _lru_index;
-
-    void updateList(std::reference_wrapper<lru_node>);
-
-    bool setValue(const std::string &key, const std::string &value);
-
-    void deleteOldest();
-
-    bool createNode(const std::string &key, const std::string &value);
 };
 
 } // namespace Backend
