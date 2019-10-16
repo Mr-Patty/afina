@@ -6,6 +6,7 @@
 #include <condition_variable>
 
 #include <afina/network/Server.h>
+#include <afina/concurrency/Executor.h>
 
 namespace spdlog {
 class logger;
@@ -66,6 +67,8 @@ private:
 
     std::mutex stop;
     std::condition_variable end_of_work;
+
+    Afina::Concurrency::Executor executor;
 };
 
 } // namespace MTblocking
