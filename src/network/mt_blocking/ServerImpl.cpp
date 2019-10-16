@@ -29,7 +29,7 @@ namespace Network {
 namespace MTblocking {
 
 // See Server.h
-ServerImpl::ServerImpl(std::shared_ptr<Afina::Storage> ps, std::shared_ptr<Logging::Service> pl) : Server(ps, pl) {}
+ServerImpl::ServerImpl(std::shared_ptr<Afina::Storage> ps, std::shared_ptr<Logging::Service> pl) : Server(ps, pl), executor("", 5, 4, 10, 3000) {}
 
 // See Server.h
 ServerImpl::~ServerImpl() {}
@@ -38,6 +38,7 @@ ServerImpl::~ServerImpl() {}
 void ServerImpl::Start(uint16_t port, uint32_t n_accept, uint32_t n_workers) {
     _logger = pLogging->select("network");
     _logger->info("Start mt_blocking network service");
+    executor.Start();
 
     sigset_t sig_mask;
     sigemptyset(&sig_mask);
@@ -91,13 +92,9 @@ void ServerImpl::Stop() {
 
 // See Server.h
 void ServerImpl::Join() {
-    std::unique_lock<std::mutex> lock(stop);
-    while (number_of_workers != 0) {
-        end_of_work.wait(lock);
-    }
-
     assert(_thread.joinable());
     _thread.join();
+    executor.Stop(true);
     close(_server_socket);
 }
 
@@ -136,18 +133,10 @@ void ServerImpl::OnRun() {
             setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof tv);
         }
 
-        // TODO: Start new thread and process data from/to connection
-        if (number_of_workers < max_workers) {
-            ++number_of_workers;
-            std::thread(&ServerImpl::worker, this, client_socket).detach();
-            {
-                std::lock_guard<std::mutex> lock(sock);
-                sockets.push_back(client_socket);
-            }
-        } else {
-            _logger->debug("All workers are busy");
+        if (!executor.Execute(&ServerImpl::worker, this, client_socket)) {
             close(client_socket);
         }
+
     }
 
     // Cleanup on exit...
