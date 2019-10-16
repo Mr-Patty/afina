@@ -137,13 +137,6 @@ void ServerImpl::OnRun() {
         }
 
         // TODO: Start new thread and process data from/to connection
-//        {
-//            static const std::string msg = "TODO: start new thread and process memcached protocol instead";
-//            if (send(client_socket, msg.data(), msg.size(), 0) <= 0) {
-//                _logger->error("Failed to write response to client: {}", strerror(errno));
-//            }
-//            close(client_socket);
-//        }
         if (number_of_workers < max_workers) {
             ++number_of_workers;
             std::thread(&ServerImpl::worker, this, client_socket).detach();
