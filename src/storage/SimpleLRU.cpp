@@ -9,7 +9,7 @@ bool SimpleLRU::Put(const std::string &key, const std::string &value) {
     if (it != _lru_index.end()) {
         return setValue(it, value);
     } else {
-        return createNode(key, value);
+        return insertNewNode(key, value);
     }
 }
 
@@ -20,7 +20,7 @@ bool SimpleLRU::PutIfAbsent(const std::string &key, const std::string &value) {
     if (it != _lru_index.end()) {
         return false;
     } else {
-        return createNode(key, value);
+        return insertNewNode(key, value);
     }
 }
 
@@ -45,6 +45,7 @@ bool SimpleLRU::Delete(const std::string &key) {
 
     auto node = it->second;
     _current_size -= (node.get().key.size() + node.get().value.size());
+    _lru_index.erase(it);
 
     if (&node.get() == _lru_head.get()) {
         std::unique_ptr<lru_node> tmp(std::move(_lru_head));
@@ -58,7 +59,6 @@ bool SimpleLRU::Delete(const std::string &key) {
         node.get().next.reset();
     }
 
-    _lru_index.erase(it);
     return true;
 
 }
@@ -98,10 +98,7 @@ void SimpleLRU::updateList(std::reference_wrapper<lru_node> current) {
 
 }
 
-bool SimpleLRU::setValue(
-        std::map<std::reference_wrapper<const std::string>,
-                std::reference_wrapper<lru_node>, std::less<std::string>>::iterator it,
-        const std::string &value) {
+bool SimpleLRU::setValue(lru_index::iterator it, const std::string &value) {
 
     auto node = it->second;
     if (node.get().key.size() + value.size() > _max_size) {
@@ -112,7 +109,7 @@ bool SimpleLRU::setValue(
 
     if (_lru_tail == nullptr) {
         auto key = node.get().key;
-        return createNode(key, value);
+        return insertNewNode(key, value);
     }
     node.get().value = value;
 
@@ -138,7 +135,7 @@ void SimpleLRU::deleteOldest(size_t extra_size) {
     }
 }
 
-bool SimpleLRU::createNode(const std::string &key, const std::string &value) {
+bool SimpleLRU::insertNewNode(const std::string &key, const std::string &value) {
 
     if (key.size() + value.size() > _max_size) {
         return false;
