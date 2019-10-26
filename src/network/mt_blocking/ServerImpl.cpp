@@ -142,7 +142,7 @@ void ServerImpl::OnRun() {
             std::thread(&ServerImpl::worker, this, client_socket).detach();
             {
                 std::lock_guard<std::mutex> lock(sock);
-                sockets.push_back(client_socket);
+                sockets.insert(client_socket);
             }
         } else {
             _logger->debug("All workers are busy");
@@ -252,12 +252,12 @@ void ServerImpl::worker(int client_socket) {
 
     {
         std::lock_guard<std::mutex> lock(sock);
-        std::remove(sockets.begin(), sockets.end(), client_socket);
+        sockets.erase(client_socket);
     }
 
     --number_of_workers;
     if (number_of_workers == 0) {
-        end_of_work.notify_one();
+        end_of_work.notify_all();
     }
 }
 

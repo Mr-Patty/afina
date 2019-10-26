@@ -4,6 +4,7 @@
 #include <atomic>
 #include <thread>
 #include <condition_variable>
+#include <set>
 
 #include <afina/network/Server.h>
 
@@ -62,7 +63,7 @@ private:
     uint32_t max_workers;
 
     std::mutex sock;
-    std::vector<int> sockets;
+    std::set<int> sockets;
 
     std::mutex stop;
     std::condition_variable end_of_work;
