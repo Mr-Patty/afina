@@ -105,14 +105,15 @@ bool SimpleLRU::setValue(lru_index::iterator it, const std::string &value) {
         return false;
     }
 
-    deleteOldest(value.size() - node.get().value.size());
-
-    if (_lru_tail == nullptr) {
-        auto key = node.get().key;
-        return insertNewNode(key, value);
+    if (value.size() > node.get().value.size()) {
+        deleteOldest(value.size() - node.get().value.size());
+    } else {
+        _current_size -= node.get().value.size();
     }
-    node.get().value = value;
 
+    node.get().value = value;
+    _current_size += value.size();
+    
     updateList(node);
     return true;
 }
