@@ -95,7 +95,6 @@ void ServerImpl::Join() {
     assert(_thread.joinable());
     _thread.join();
     executor.Stop(true);
-    close(_server_socket);
 }
 
 // See Server.h
@@ -141,6 +140,7 @@ void ServerImpl::OnRun() {
 
     // Cleanup on exit...
     _logger->warn("Network stopped");
+    close(_server_socket);
 }
 
 void ServerImpl::worker(int client_socket) {
