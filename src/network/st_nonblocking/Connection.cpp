@@ -9,33 +9,33 @@ namespace STnonblock {
 
 // See Connection.h
 void Connection::Start() {
-    std::cout << "Start" << std::endl;
     _event.events = EPOLLIN | EPOLLRDHUP | EPOLLERR;
     _event.data.fd = _socket;
     _event.data.ptr = this;
+    _logger->debug("Start connection on {} socket", _socket);
 }
 
 // See Connection.h
 void Connection::OnError() {
-    std::cout << "OnError" << std::endl;
+    _logger->debug("Error on {} socket", _socket);
     is_Alive = false;
 }
 
 // See Connection.h
 void Connection::OnClose() {
-    std::cout << "OnClose" << std::endl;
+    _logger->debug("Close {} socket", _socket);
     is_Alive = false;
 }
 
 // See Connection.h
 void Connection::DoRead() {
-    std::cout << "DoRead" << std::endl;
+    _logger->debug("Read from {} socket", _socket);
 
     try {
         int readed_bytes = -1;
         char client_buffer[4096];
         while ((readed_bytes = read(_socket, client_buffer + old_readed_bytes, sizeof(client_buffer) - old_readed_bytes)) > 0) {
-//            _logger->debug("Got {} bytes from socket", readed_bytes);
+            _logger->debug("Got {} bytes from socket", readed_bytes);
             old_readed_bytes += readed_bytes;
 
             // Single block of data readed from the socket could trigger inside actions a multiple times,
@@ -43,17 +43,17 @@ void Connection::DoRead() {
             // - read#0: [<command1 start>]
             // - read#1: [<command1 end> <argument> <command2> <argument for command 2> <command3> ... ]
             while (old_readed_bytes > 0) {
-//                _logger->debug("Process {} bytes", old_readed_bytes);
+                _logger->debug("Process {} bytes", old_readed_bytes);
                 // There is no command yet
                 if (!command_to_execute) {
                     std::size_t parsed = 0;
                     if (parser.Parse(client_buffer, old_readed_bytes, parsed)) {
                         // There is no command to be launched, continue to parse input stream
                         // Here we are, current chunk finished some command, process it
-//                        _logger->debug("Found new command: {} in {} bytes", parser.Name(), parsed);
+                        _logger->debug("Found new command: {} in {} bytes", parser.Name(), parsed);
                         command_to_execute = parser.Build(arg_remains);
                         if (arg_remains > 0) {
-                            arg_remains += 2;
+                            arg_remains += 2; // Зачем? Кажется с этим он неправильно парсит результат.
                         }
                     }
 
@@ -69,7 +69,7 @@ void Connection::DoRead() {
 
                 // There is command, but we still wait for argument to arrive...
                 if (command_to_execute && arg_remains > 0) {
-//                    _logger->debug("Fill argument: {} bytes of {}", old_readed_bytes, arg_remains);
+                    _logger->debug("Fill argument: {} bytes of {}", old_readed_bytes, arg_remains);
                     // There is some parsed command, and now we are reading argument
                     std::size_t to_read = std::min(arg_remains, std::size_t(old_readed_bytes));
                     argument_for_command.append(client_buffer, to_read);
@@ -81,15 +81,13 @@ void Connection::DoRead() {
 
                 // Thre is command & argument - RUN!
                 if (command_to_execute && arg_remains == 0) {
-//                    _logger->debug("Start command execution");
+                    _logger->debug("Start command execution");
 
                     std::string result;
                     command_to_execute->Execute(*pStorage, argument_for_command, result);
-
                     // Send response
                     result += "\r\n";
-                    if (answers.empty())
-                        _event.events |= EPOLLOUT;
+                    _event.events = EPOLLIN | EPOLLRDHUP | EPOLLERR | EPOLLOUT;
                     answers.push_back(result);
 
                     // Prepare for the next command
@@ -101,12 +99,12 @@ void Connection::DoRead() {
         }
 
         if (readed_bytes == 0) {
-//            _logger->debug("Connection closed");
+            _logger->debug("Connection closed");
         } else {
             throw std::runtime_error(std::string(strerror(errno)));
         }
     } catch (std::runtime_error &ex) {
-//        _logger->error("Failed to process connection on descriptor {}: {}", client_socket, ex.what());
+        _logger->error("Failed to process connection on descriptor {}: {}", _socket, ex.what());
     }
 }
 
@@ -115,7 +113,7 @@ void Connection::DoWrite() {
     if (answers.empty()) {
         return;
     }
-    std::cout << "DoWrite" << std::endl;
+    _logger->debug("Write to {} socket", _socket);
 
     struct iovec iovecs[answers.size()];
 
@@ -126,7 +124,7 @@ void Connection::DoWrite() {
         iovecs[i].iov_base = &(answers[i][0]);
     }
 
-    int written;
+    ssize_t written;
     if ((written = writev(_socket, iovecs, answers.size())) <= 0) {
         OnError();
     }
@@ -134,17 +132,17 @@ void Connection::DoWrite() {
 
     int i = 0;
     for (;; i++) {
-        if (i >= answers.size() && (cur_position - iovecs[i].iov_len) < 0) {
+        if (i >= answers.size() || (cur_position - iovecs[i].iov_len) < 0) {
             break;
         }
         cur_position -= iovecs[i].iov_len;
     }
     answers.erase(answers.begin(), answers.begin() + i);
     if (answers.empty()) {
-        _event.events = EPOLLIN | EPOLLRDHUP | EPOLLERR; // без записи
+        _event.events = EPOLLIN | EPOLLRDHUP | EPOLLERR;
     }
 
-    }
+}
 
 } // namespace STnonblock
 } // namespace Network
