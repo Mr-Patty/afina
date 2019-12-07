@@ -8,6 +8,7 @@
 #include <queue>
 #include <string>
 #include <thread>
+#include <atomic>
 
 namespace Afina {
 namespace Concurrency {
@@ -35,7 +36,8 @@ public:
         max_queue_size(size),
         hight_watermark(high),
         low_watermark(low),
-        idle_time(time) {};
+        idle_time(time),
+        number_of_threads(0) {};
 
     ~Executor() {};
 
@@ -67,8 +69,9 @@ public:
 
         // Enqueue new task
         tasks.push_back(exec);
-        if (free_threads == 0 && threads.size() < hight_watermark) {
-            threads.push_back(std::thread(&perform, this));
+        if (free_threads == 0 && number_of_threads < hight_watermark) {
+            std::thread(&perform, this).detach();
+            number_of_threads++;
         }
         empty_condition.notify_one();
         return true;
@@ -111,13 +114,14 @@ private:
     /**
      * Flag to stop bg threads
      */
-    State state;
+    std::atomic<State> state;
 
     int low_watermark;
     int hight_watermark;
     int max_queue_size;
     int idle_time;
     int free_threads;
+    int number_of_threads;
 
     std::condition_variable stop_work;
 
