@@ -77,6 +77,7 @@ public:
         empty_condition.notify_one();
         return true;
     }
+    void Stopping();
 
 private:
     // No copy/move/assign allowed

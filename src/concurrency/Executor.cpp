@@ -6,17 +6,18 @@ namespace Concurrency {
 
     void perform(Executor* executor) {
 
-        while (executor->state.load() == Executor::State::kRun && !executor->tasks.empty()) {
+        while (executor->state.load() == Executor::State::kRun) {
             std::function<void()> task;
             {
                 std::unique_lock<std::mutex> lock(executor->mutex);
                 auto time_until = std::chrono::system_clock::now() + std::chrono::milliseconds(executor->idle_time);
-                while (executor->tasks.empty() == 0 && executor->state.load() == Executor::State::kRun) {
 
-                    while (executor->empty_condition.wait_until(lock, time_until) == std::cv_status::timeout) {
-                        if (executor->active_threads + executor->free_threads > executor->low_watermark) {
-                            break;
-                        }
+                while (executor->tasks.empty() == 0 && executor->state.load() == Executor::State::kRun) {
+                    if (executor->empty_condition.wait_until(lock, time_until) == std::cv_status::timeout &&
+                        executor->active_threads + executor->free_threads > executor->low_watermark) {
+                        break;
+                    } else {
+                        executor->empty_condition.wait(lock);
                     }
                 }
                 if (executor->tasks.empty()) {
@@ -48,18 +49,25 @@ namespace Concurrency {
         }
     }
 
-    void Executor::Stop(bool await) {
+    void Executor::Stopping() {
+
         std::unique_lock<std::mutex> lock(mutex);
+        while (active_threads != 0) {
+            stop_work.wait(lock);
+        }
+        state.store(State::kStopped);
+    }
+
+    void Executor::Stop(bool await) {
         if (state.load() == State::kRun) {
             state.store(State::kStopping);
-
-            if(await) {
-                empty_condition.wait(lock,[&](){ return free_threads + active_threads == 0;});
+            std::thread t(&Executor::Stopping, this);
+            if (!await) {
+                t.detach();
+            } else {
+                t.join();
             }
-        } else {
-            state.store(State::kStopped);
         }
-
     }
 
     void Executor::Start() {
