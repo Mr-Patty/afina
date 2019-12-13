@@ -13,6 +13,15 @@ void Connection::Start() {
     _event.data.fd = _socket;
     _event.data.ptr = this;
     _logger->debug("Start connection on {} socket", _socket);
+    command_to_execute.reset();
+    argument_for_command.resize(0);
+    parser.Reset();
+    arg_remains = 0;
+
+    cur_position = 0;
+    old_readed_bytes = 0;
+    answers.clear();
+    _event.data.ptr = this;
 }
 
 // See Connection.h
@@ -100,7 +109,7 @@ void Connection::DoRead() {
 
         if (readed_bytes == 0) {
             _logger->debug("Connection closed");
-        } else {
+        } else if (errno == EAGAIN) {
             throw std::runtime_error(std::string(strerror(errno)));
         }
     } catch (std::runtime_error &ex) {
