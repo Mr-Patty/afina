@@ -37,9 +37,10 @@ public:
         hight_watermark(high),
         low_watermark(low),
         idle_time(time),
-        number_of_threads(0) {};
+        active_threads(0),
+        free_threads(low    ) {};
 
-    ~Executor() {};
+    ~Executor() {Stop(true);};
 
     void Start();
 
@@ -69,9 +70,9 @@ public:
 
         // Enqueue new task
         tasks.push_back(exec);
-        if (free_threads == 0 && number_of_threads < hight_watermark) {
+        if (free_threads == 0 && active_threads + free_threads < hight_watermark) {
             std::thread(&perform, this).detach();
-            number_of_threads++;
+            active_threads++;
         }
         empty_condition.notify_one();
         return true;
@@ -121,7 +122,7 @@ private:
     int max_queue_size;
     int idle_time;
     int free_threads;
-    int number_of_threads;
+    int active_threads;
 
     std::condition_variable stop_work;
 

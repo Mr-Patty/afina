@@ -6,25 +6,24 @@ namespace Concurrency {
 
     void perform(Executor* executor) {
 
-        while (executor->state.load() == Executor::State::kRun) {
+        while (executor->state.load() == Executor::State::kRun && !executor->tasks.empty()) {
             std::function<void()> task;
             {
                 std::unique_lock<std::mutex> lock(executor->mutex);
                 auto time_until = std::chrono::system_clock::now() + std::chrono::milliseconds(executor->idle_time);
-                while (executor->number_of_threads == 0 && executor->state.load() == Executor::State::kRun) {
+                while (executor->tasks.empty() == 0 && executor->state.load() == Executor::State::kRun) {
 
-                    executor->free_threads++;
                     while (executor->empty_condition.wait_until(lock, time_until) == std::cv_status::timeout) {
-                        if (executor->number_of_threads > executor->low_watermark) {
-                            executor->number_of_threads--;
-                            return;
-                        } else {
-                            continue;
+                        if (executor->active_threads + executor->free_threads > executor->low_watermark) {
+                            break;
                         }
                     }
-                    executor->free_threads--;
                 }
-
+                if (executor->tasks.empty()) {
+                    continue;
+                }
+                executor->free_threads--;
+                executor->active_threads++;
                 task = executor->tasks.front();
                 executor->tasks.pop_front();
             }
@@ -33,11 +32,17 @@ namespace Concurrency {
             } catch(...) {
                 std::terminate();
             }
+            {
+                std::unique_lock<std::mutex> lock(executor->mutex);
+                executor->free_threads++;
+                executor->active_threads--;
+            }
         }
         {
             std::unique_lock<std::mutex> lock(executor->mutex);
-            executor->number_of_threads--;
-            if (executor->number_of_threads == 0) {
+            executor->free_threads--;
+            if (executor->state == Executor::State::kStopping && executor->tasks.empty()) {
+                executor->state = Executor::State::kStopped;
                 executor->stop_work.notify_all();
             }
         }
@@ -47,11 +52,11 @@ namespace Concurrency {
         std::unique_lock<std::mutex> lock(mutex);
         if (state.load() == State::kRun) {
             state.store(State::kStopping);
-            empty_condition.notify_all();
 
-            while (number_of_threads != 0 && await) {
-                stop_work.wait(lock);
+            if(await) {
+                empty_condition.wait(lock,[&](){ return free_threads + active_threads == 0;});
             }
+        } else {
             state.store(State::kStopped);
         }
 
@@ -61,10 +66,9 @@ namespace Concurrency {
         state.store(State::kRun);
         std::unique_lock<std::mutex> lock(mutex);
         for (int i = 0; i < low_watermark; i++) {
-            number_of_threads++;
+            free_threads++;
             std::thread(&perform, this).detach();
         }
-        free_threads = 0;
     }
 
 
