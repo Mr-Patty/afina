@@ -12,9 +12,7 @@ void Engine::Store(context &ctx) {
     ctx.Low = StackBottom;
     ctx.Hight = &current_address;
     if (ctx.Hight < ctx.Low) {
-        auto tmp = ctx.Hight;
-        ctx.Hight = ctx.Low;
-        ctx.Low = tmp;
+        std::swap(ctx.Hight, ctx.Low);
     }
     auto &buf = std::get<0>(ctx.Stack);
     auto &size = std::get<1>(ctx.Stack);
