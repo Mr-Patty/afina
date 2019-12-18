@@ -14,6 +14,16 @@ void Connection::Start() {
     _event.data.fd = _socket;
     _event.data.ptr = this;
     _logger->debug("Start connection on {} socket", _socket);
+
+    command_to_execute.reset();
+    argument_for_command.resize(0);
+    parser.Reset();
+    arg_remains = 0;
+
+    cur_position = 0;
+    old_readed_bytes = 0;
+    answers.clear();
+    _event.data.ptr = this;
 }
 
 // See Connection.h
@@ -32,6 +42,8 @@ void Connection::OnClose() {
 void Connection::DoRead() {
     _logger->debug("Read from {} socket", _socket);
     std::lock_guard<std::mutex> lock(mt);
+    int client_socket = _socket;
+    command_to_execute = nullptr;
     try {
         int readed_bytes = -1;
         char client_buffer[4096];
@@ -54,7 +66,7 @@ void Connection::DoRead() {
                         _logger->debug("Found new command: {} in {} bytes", parser.Name(), parsed);
                         command_to_execute = parser.Build(arg_remains);
                         if (arg_remains > 0) {
-//                            arg_remains += 2; // Зачем? Кажется с этим он неправильно парсит результат.
+                            arg_remains += 2; // Зачем? Кажется с этим он неправильно парсит результат.
                         }
                     }
 
@@ -99,10 +111,9 @@ void Connection::DoRead() {
             } // while (readed_bytes)
         }
 
-//        is_Alive.store(false);
         if (readed_bytes == 0) {
             _logger->debug("Connection closed");
-        } else {
+        } else if (errno == EAGAIN) {
             throw std::runtime_error(std::string(strerror(errno)));
         }
     } catch (std::runtime_error &ex) {

@@ -119,6 +119,10 @@ void ServerImpl::Stop() {
     if (eventfd_write(_event_fd, 1)) {
         throw std::runtime_error("Failed to wakeup workers");
     }
+    for(auto con: connections){
+        close(con->_socket);
+        delete con;
+    }
 }
 
 // See Server.h
@@ -207,6 +211,9 @@ void ServerImpl::OnRun() {
                         _logger->debug("epoll_ctl failed during connection register in workers'epoll: error {}", epoll_ctl_retval);
                         pc->OnError();
                         delete pc;
+                    } else {
+                        std::lock_guard<std::mutex> lock(mt);
+                        connections.insert(pc);
                     }
                 }
             }
