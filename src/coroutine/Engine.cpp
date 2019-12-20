@@ -19,17 +19,19 @@ void Engine::Store(context &ctx) {
     auto need_size = ctx.Low - ctx.Hight;
 
     if (size < need_size) {
-        delete[] buf;
+        if (buf != nullptr) {
+            delete[] buf;
+        }
         buf = new char[need_size];
         size = need_size;
     }
     memcpy(buf, ctx.Low, need_size);
-    ctx.Stack = std::make_tuple(buf, size);
+    ctx.Stack = std::make_tuple(buf, need_size);
 }
 
 void Engine::Restore(context &ctx) {
     char current_address;
-    if ((&current_address >= ctx.Low) && (ctx.Hight > &current_address)) {
+    if ((&current_address >= ctx.Low) && (&current_address < ctx.Hight)) {
         Restore(ctx);
     }
 
@@ -44,8 +46,7 @@ void Engine::yield() {
     if (alive == nullptr) {
         return;
     }
-
-    Store(*cur_routine);
+    
     auto routine_todo = alive;
     if (routine_todo == cur_routine) {
         if (alive->next != nullptr) {
@@ -62,11 +63,18 @@ void Engine::sched(void *routine) {
     } else if (routine == nullptr) {
         yield();
     }
-    if (setjmp(cur_routine->Environment) == 0) {
+    Enter(*(static_cast<context *>(routine)));
+}
+
+void Engine::Enter(context& ctx) {
+    if (cur_routine != nullptr && cur_routine != idle_ctx) {
+        if (setjmp(cur_routine->Environment) > 0) {
+            return;
+        }
         Store(*cur_routine);
-        context *ctx = static_cast<context *>(routine);
-        Restore(*ctx);
     }
+    cur_routine = &ctx;
+    Restore(ctx);
 }
 
 } // namespace Coroutine
