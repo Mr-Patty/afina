@@ -12,7 +12,6 @@ void Connection::Start() {
     std::lock_guard<std::mutex> lock(mt);
     _event.events = EPOLLIN | EPOLLRDHUP | EPOLLERR;
     _event.data.fd = _socket;
-    _event.data.ptr = this;
     _logger->debug("Start connection on {} socket", _socket);
 
     command_to_execute.reset();
@@ -23,7 +22,6 @@ void Connection::Start() {
     cur_position = 0;
     old_readed_bytes = 0;
     answers.clear();
-    _event.data.ptr = this;
 }
 
 // See Connection.h
@@ -46,7 +44,6 @@ void Connection::DoRead() {
     command_to_execute = nullptr;
     try {
         int readed_bytes = -1;
-        char client_buffer[4096];
         while ((readed_bytes = read(_socket, client_buffer + old_readed_bytes, sizeof(client_buffer) - old_readed_bytes)) > 0) {
             _logger->debug("Got {} bytes from socket", readed_bytes);
             old_readed_bytes += readed_bytes;
@@ -100,7 +97,9 @@ void Connection::DoRead() {
                     command_to_execute->Execute(*pStorage, argument_for_command, result);
                     // Send response
                     result += "\r\n";
-                    _event.events = EPOLLIN | EPOLLRDHUP | EPOLLERR | EPOLLOUT;
+                    if (answers.empty()) {
+                        _event.events = EPOLLIN | EPOLLRDHUP | EPOLLERR | EPOLLOUT;
+                    }
                     answers.push_back(result);
 
                     // Prepare for the next command
@@ -113,8 +112,6 @@ void Connection::DoRead() {
 
         if (readed_bytes == 0) {
             _logger->debug("Connection closed");
-        } else if (errno == EAGAIN) {
-            throw std::runtime_error(std::string(strerror(errno)));
         }
     } catch (std::runtime_error &ex) {
         _logger->error("Failed to process connection on descriptor {}: {}", _socket, ex.what());
@@ -123,20 +120,24 @@ void Connection::DoRead() {
 
 // See Connection.h
 void Connection::DoWrite() {
+    std::lock_guard<std::mutex> lock(mt);
     if (answers.empty()) {
         return;
     }
-    std::lock_guard<std::mutex> lock(mt);
     _logger->debug("Write to {} socket", _socket);
 
     struct iovec iovecs[answers.size()];
 
-    iovecs[0].iov_len = answers[0].size() - cur_position;
-    iovecs[0].iov_base = &(answers[0][0]) + cur_position;
-    for (int i = 1; i < answers.size(); i++) {
-        iovecs[i].iov_len = answers[i].size();
-        iovecs[i].iov_base = &(answers[i][0]);
+//    iovecs[0].iov_len = answers[0].size() - cur_position;
+//    iovecs[0].iov_base = &(answers[0][0]) + cur_position;
+    int i = 0;
+    for (auto &res : answers) {
+        iovecs[i].iov_len = res.size();
+        iovecs[i].iov_base = &(res[0]);
+        ++i;
     }
+    iovecs[0].iov_len -= cur_position;
+    iovecs[0].iov_base = &(answers[0][0]) + cur_position;
 
     ssize_t written;
     if ((written = writev(_socket, iovecs, answers.size())) <= 0) {
@@ -144,14 +145,13 @@ void Connection::DoWrite() {
     }
     cur_position += written;
 
-    int i = 0;
-    for (;; i++) {
-        if (i >= answers.size() || (cur_position - iovecs[i].iov_len) < 0) {
-            break;
-        }
-        cur_position -= iovecs[i].iov_len;
+    auto it = answers.begin();
+    while (it != answers.end() && (cur_position >= it->size())) {
+        cur_position -= it->size();
+        it++;
     }
-    answers.erase(answers.begin(), answers.begin() + i);
+
+    answers.erase(answers.begin(), it);
     if (answers.empty()) {
         _event.events = EPOLLIN | EPOLLRDHUP | EPOLLERR;
     }

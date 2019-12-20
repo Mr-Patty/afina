@@ -50,6 +50,7 @@ private:
     int old_readed_bytes = 0;
 
     ssize_t cur_position = 0;
+    char client_buffer[4096];
 };
 
 } // namespace MTnonblock
