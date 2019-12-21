@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <sys/uio.h>
+#include <sys/socket.h>
 
 namespace Afina {
 namespace Network {
@@ -98,7 +99,7 @@ void Connection::DoRead() {
                     // Send response
                     result += "\r\n";
                     if (answers.empty()) {
-                        _event.events = EPOLLIN | EPOLLRDHUP | EPOLLERR | EPOLLOUT;
+                        _event.events |= EPOLLRDHUP | EPOLLERR | EPOLLOUT;
                     }
                     answers.push_back(result);
 
@@ -115,6 +116,7 @@ void Connection::DoRead() {
         }
     } catch (std::runtime_error &ex) {
         _logger->error("Failed to process connection on descriptor {}: {}", _socket, ex.what());
+        shutdown(_socket, SHUT_RD);
     }
 }
 
