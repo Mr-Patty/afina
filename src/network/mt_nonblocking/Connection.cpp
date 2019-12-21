@@ -127,35 +127,38 @@ void Connection::DoWrite() {
         return;
     }
     _logger->debug("Write to {} socket", _socket);
+    
+    try {
+        struct iovec iovecs[answers.size()];
 
-    struct iovec iovecs[answers.size()];
+        int i = 0;
+        for (auto &res : answers) {
+            iovecs[i].iov_len = res.size();
+            iovecs[i].iov_base = &(res[0]);
+            ++i;
+        }
+        iovecs[0].iov_len -= cur_position;
+        iovecs[0].iov_base = &(answers[0][0]) + cur_position;
 
-//    iovecs[0].iov_len = answers[0].size() - cur_position;
-//    iovecs[0].iov_base = &(answers[0][0]) + cur_position;
-    int i = 0;
-    for (auto &res : answers) {
-        iovecs[i].iov_len = res.size();
-        iovecs[i].iov_base = &(res[0]);
-        ++i;
-    }
-    iovecs[0].iov_len -= cur_position;
-    iovecs[0].iov_base = &(answers[0][0]) + cur_position;
+        ssize_t written;
+        if ((written = writev(_socket, iovecs, answers.size())) <= 0) {
+            OnError();
+        }
+        cur_position += written;
 
-    ssize_t written;
-    if ((written = writev(_socket, iovecs, answers.size())) <= 0) {
-        OnError();
-    }
-    cur_position += written;
+        auto it = answers.begin();
+        while (it != answers.end() && (cur_position >= it->size())) {
+            cur_position -= it->size();
+            it++;
+        }
 
-    auto it = answers.begin();
-    while (it != answers.end() && (cur_position >= it->size())) {
-        cur_position -= it->size();
-        it++;
-    }
-
-    answers.erase(answers.begin(), it);
-    if (answers.empty()) {
-        _event.events = EPOLLIN | EPOLLRDHUP | EPOLLERR;
+        answers.erase(answers.begin(), it);
+        if (answers.empty()) {
+            _event.events = EPOLLIN | EPOLLRDHUP | EPOLLERR;
+        }
+    } catch (std::runtime_error &ex) {
+        _logger->error("Failed write on descriptor {}: {}", _socket, ex.what());
+        shutdown(_socket, SHUT_WR);
     }
 }
 
