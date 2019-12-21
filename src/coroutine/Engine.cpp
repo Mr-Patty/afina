@@ -16,12 +16,10 @@ void Engine::Store(context &ctx) {
     }
     auto &buf = std::get<0>(ctx.Stack);
     auto &size = std::get<1>(ctx.Stack);
-    auto need_size = ctx.Low - ctx.Hight;
+    auto need_size = ctx.Hight - ctx.Low;
 
     if (size < need_size) {
-        if (buf != nullptr) {
-            delete[] buf;
-        }
+        delete[] buf;
         buf = new char[need_size];
         size = need_size;
     }
@@ -51,9 +49,11 @@ void Engine::yield() {
     if (routine_todo == cur_routine) {
         if (alive->next != nullptr) {
             routine_todo = alive->next;
-            sched(static_cast<void *>(routine_todo));
+        } else {
+            return;
         }
     }
+    Enter(*routine_todo);
 
 }
 
