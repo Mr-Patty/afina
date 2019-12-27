@@ -37,8 +37,8 @@ public:
         hight_watermark(high),
         low_watermark(low),
         idle_time(time),
-        active_threads(0),
-        free_threads(low    ) {};
+        number_of_threads(0),
+        free_threads(low) {};
 
     ~Executor() {Stop(true);};
 
@@ -70,9 +70,9 @@ public:
 
         // Enqueue new task
         tasks.push_back(exec);
-        if (free_threads == 0 && active_threads + free_threads < hight_watermark) {
+        if (free_threads == 0 && number_of_threads < hight_watermark) {
             std::thread(&perform, this).detach();
-            active_threads++;
+            number_of_threads++;
         }
         empty_condition.notify_one();
         return true;
@@ -116,14 +116,14 @@ private:
     /**
      * Flag to stop bg threads
      */
-    std::atomic<State> state;
+    State state;
 
     int low_watermark;
     int hight_watermark;
     int max_queue_size;
     int idle_time;
     int free_threads;
-    int active_threads;
+    int number_of_threads;
 
     std::condition_variable stop_work;
 
