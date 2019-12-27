@@ -17,7 +17,7 @@ namespace Concurrency {
 
                 auto time_until = std::chrono::system_clock::now() + std::chrono::milliseconds(executor->idle_time);
                 executor->free_threads++;
-                if (executor->empty_condition.wait_until(lock, time, [&]() { return executor->tasks.empty(); })) {
+                if (executor->empty_condition.wait_until(lock, time_until, [&]() { return executor->tasks.empty(); })) {
                     if (executor->number_of_threads > executor->low_watermark) {
                         executor->free_threads--;
                         break;
