@@ -3,8 +3,10 @@
 
 #include <thread>
 #include <vector>
+#include <unordered_set>
 
 #include <afina/network/Server.h>
+#include "Connection.h"
 
 namespace spdlog {
 class logger;
@@ -56,6 +58,7 @@ private:
 
     // IO thread
     std::thread _work_thread;
+    std::unordered_set<Connection*> connections;
 };
 
 } // namespace STnonblock
